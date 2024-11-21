@@ -59,7 +59,7 @@ connectToDatabase();
 
 app.use(
   cors({
-    origin: process.env.frontend_domain,
+    origin: '*',
     methods: ["GET", "POST", "PATCH", "DELETE"],
     credentials: true,
   })
