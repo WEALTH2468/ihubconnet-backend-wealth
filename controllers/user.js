@@ -9,6 +9,7 @@ const { CatchErrorFunc } = require('../utils/CatchErrorFunc');
 const crypto = require('crypto');
 const { error } = require('console');
 const { Error } = require('mongoose');
+const { getGravatarBlob, saveImageBlob } = require("../utils/getDefaultsAvater");
 // const sgMail = require("@sendgrid/mail");
 // const { error } = require('console');
 // const initSocketIO = require("../websocket")
@@ -116,18 +117,18 @@ exports.signup = async (req, res, next) => {
     const newUser = new User({
       displayName,
       email,
-      emails: [{ email: req.body.email, label: 'primary' }],
+      emails: [{ email: req.body.email, label: "primary" }],
       phoneNumbers: [
         {
-          country: 'ng',
-          phoneNumber: '',
-          label: '',
+          country: "ng",
+          phoneNumber: "",
+          label: "",
         },
       ],
       password: hash,
       roleId,
-      role: 'user',
-      status: 'offline',
+      role: "user",
+      status: "offline",
     });
     const userSaved = await newUser.save();
 
@@ -272,9 +273,9 @@ exports.update = async (req, res, next) => {
       if (!userNewData.password) {
         return res.status(400).json([
           {
-            type: 'password',
+            type: "password",
             message:
-              'Please provide your former password to create New password!',
+              "Please provide your former password to create New password!",
           },
         ]);
       }
@@ -283,9 +284,9 @@ exports.update = async (req, res, next) => {
       if (!isMatch) {
         return res.status(400).json([
           {
-            type: 'password',
+            type: "password",
             message:
-              'Please provide your former password to create New password!',
+              "Please provide your former password to create New password!",
           },
         ]);
       }
@@ -293,29 +294,51 @@ exports.update = async (req, res, next) => {
       const hash = await hashPassword(userNewData.newPassword);
       userNewData.password = hash;
     } else if (userNewData.newPassword) {
-        userNewData.password = await hashPassword(userNewData.newPassword);
-    }else{
-      delete userNewData.password
+      userNewData.password = await hashPassword(userNewData.newPassword);
+    } else {
+      delete userNewData.password;
     }
-
 
     Object.keys(req.files).forEach((key, index) => {
       if (userNewData[key]) {
-        const fileName = userNewData[key].split('/images/')[1];
-        fs.unlink('images/' + fileName, () => {
-          userNewData[key] = '/images/' + req.files[key][0].filename;
+        const fileName = userNewData[key].split("/images/")[1];
+        fs.unlink("images/" + fileName, () => {
+          userNewData[key] = "/images/" + req.files[key][0].filename;
         });
       }
 
-      userNewData[key] = '/images/' + req.files[key][0].filename;
+      userNewData[key] = "/images/" + req.files[key][0].filename;
     });
 
+    // Apply Gravatar fallback as Blob for avatar and background
+    if (!userNewData.avatar || userNewData.avatar === "") {
+      const gravatarBlob = await getGravatarBlob(
+        userNewData.emails[0]?.email,
+        200
+      );
+      userNewData.avatar = saveImageBlob(
+        gravatarBlob,
+        `avatar-${Date.now()}.jpg`
+      );
+    }
+
+    if (!userNewData.background || userNewData.background === "") {
+      const gravatarBlob = await getGravatarBlob(
+        userNewData.emails[0]?.email,
+        400
+      );
+      userNewData.background = saveImageBlob(
+        gravatarBlob,
+        `background-${Date.now()}.jpg`
+      );
+    }
+
     const userUpdated = await User.findOneAndUpdate(
-      {_id:userId}, // find the user by id
+      { _id: userId }, // find the user by id
       userNewData,
       { new: true } // updated data
     );
-    console.log('updated:', userUpdated);
+    console.log("updated:", userUpdated);
 
     const updatedUser = await getUserWithUnitsMembers(userUpdated._id);
 
@@ -325,7 +348,7 @@ exports.update = async (req, res, next) => {
 
     return res.status(200).json({
       updatedUser,
-      message: 'Updated successfully!',
+      message: "Updated successfully!",
     });
   } catch (error) {
     console.error(error);
