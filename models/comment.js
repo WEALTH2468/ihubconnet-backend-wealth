@@ -12,6 +12,8 @@ const commentSchema = new Schema({
   challengeId: { type: Schema.Types.ObjectId, ref: 'Challenge' },
   objectiveId: { type: Schema.Types.ObjectId, ref: 'Objective' },
   text: { type: String },
+  parentId: { type: Schema.Types.ObjectId, ref: 'Comment', default: null }
+
 });
 
 const Comment = mongoose.model('Comment', commentSchema);

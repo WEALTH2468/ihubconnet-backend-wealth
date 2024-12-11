@@ -4,6 +4,8 @@ const router = express.Router();
 
 const commentCtrl = require('../controllers/comment');
 
+router.get('/nested/:postId', commentCtrl.getNestedComments);
+
 router.post('/', commentCtrl.addComment);
 router.delete('/:id', auth, commentCtrl.deleteComment);
 router.get('/:id', auth, commentCtrl.getComments);
