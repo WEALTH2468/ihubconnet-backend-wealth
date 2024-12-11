@@ -1,6 +1,7 @@
 const bcrypt = require('bcrypt');
 const Role = require('../models/role');
 const User = require('../models/user');
+const TempUser = require("../models/tempUser");
 const jwt = require('jsonwebtoken');
 const fs = require('fs');
 const { sendMail } = require('../utils/sendMail');
@@ -10,9 +11,7 @@ const crypto = require('crypto');
 const { error } = require('console');
 const { Error } = require('mongoose');
 const { getGravatarBlob, saveImageBlob } = require("../utils/getDefaultsAvater");
-// const sgMail = require("@sendgrid/mail");
-// const { error } = require('console');
-// const initSocketIO = require("../websocket")
+
 
 const signToken = (userId) => {
   return jwt.sign({ userId: userId }, process.env.access_token, {
@@ -100,24 +99,158 @@ exports.refresh = async (req, res, next) => {
 
 exports.signup = async (req, res, next) => {
   try {
-    const { email, displayName, password, roleId } = req.body;
-    const userNewData = await User.findOne({ email }).lean();
+    const { email, displayName, password } = req.body;
 
+    const userNewData = await User.findOne({ email }).lean();
     if (!!userNewData) {
-      return res.status(500).json([
+      return res.status(409).json([
         {
-          type: 'email',
-          message: 'The email address is already in use',
+          type: "email",
+          message: "The email address is already in use",
+          status: 409,
         },
       ]);
     }
 
+    const tempUser = await TempUser.findOne({ email });
+    if (tempUser) {
+      // If the email exists in TempUser, update the verification code and resend the email
+      tempUser.generateVerificationCode();
+      await tempUser.save();
+
+        const access_token = signToken(tempUser._id);
+
+      await sendMail({
+        email: tempUser.email,
+        subject: "Email Verification",
+        message: `Your new verification code is: ${tempUser.verificationCode}`,
+      });
+
+      return res.status(200).json({
+        access_token,
+        tempUser,
+        message:
+          "Email verification already pending. A new verification code has been sent to your email.",
+      });
+    }
+
+    // If the email doesn't exist in TempUser, create a new entry
     const hash = await hashPassword(password);
+
+    const newTempUser = new TempUser({
+      email,
+      displayName,
+      password: hash,
+    });
+
+    newTempUser.generateVerificationCode();
+
+    const userSaved = await newTempUser.save();
+
+    const access_token = signToken(newTempUser._id);
+
+    // Send verification email
+    await sendMail({
+      email: userSaved.email,
+      subject: "Email Verification",
+      message: `Your verification code is: ${userSaved.verificationCode}`,
+    });
+
+    
+
+    return res.status(200).json({
+      access_token,
+      userSaved,
+      message:
+        "User created successfully. A verification code has been sent to your email.",
+    });
+  } catch (error) {
+    console.error(error);
+
+    return res.status(500).json({
+      message: "An error occurred, please try again.",
+      status: 500,
+      error: error.message || error,
+    });
+  }
+};
+
+
+exports.resendVerificationCode = async (req, res) => {
+  try {
+    const verifiedID = req.auth.userId;
+
+    const tempUser = await TempUser.findById(verifiedID);
+    if (!tempUser) {
+      return res.status(404).json({
+        message: "No pending verification found for this user.",
+      });
+    }
+
+    // Generate a new verification code and update the timestamp
+    tempUser.generateVerificationCode();
+
+     await tempUser.save();
+
+        const access_token = signToken(tempUser._id);
+
+
+    // Resend the verification email
+    await sendMail({
+      email: tempUser.email,
+      subject: "Resend Email Verification",
+      message: `Your new verification code is: ${tempUser.verificationCode}`,
+    });
+
+
+    return res.status(200).json({
+      access_token,
+      tempUser,
+      message: "A new verification code has been sent to your email.",
+    });
+  } catch (error) {
+    console.error(error);
+    return res.status(500).json({
+      message: "An error occurred while resending the verification code.",
+      error: error.message || error,
+    });
+  }
+};
+
+
+exports.verifyEmail = async (req, res) => {
+  try {
+    const { verificationCode } = req.body;
+    const verifiedID = req.auth.userId;
+
+    if (!verifiedID) {
+      return res.status(401).json({ message: "Unauthorized", status: 401 });
+    }
+
+    const tempUser = await TempUser.findById(verifiedID);
+
+    if (!tempUser) {
+      return res.status(404).json({ message: "No verification record found.", status: 404 });     
+    }
+
+    if (
+      tempUser.verificationCode !== verificationCode ||
+      new Date() > tempUser.verificationCodeExpiresAt
+    ) {
+      return res
+        .status(400)
+        .json({ message: "Invalid or expired verification code.",
+          status: 400,
+         });
+    }
+
+    // Move data to User collection
+    const { displayName, password, email } = tempUser;
 
     const newUser = new User({
       displayName,
       email,
-      emails: [{ email: req.body.email, label: "primary" }],
+      emails: [{ email: tempUser.email, label: "primary" }],
       phoneNumbers: [
         {
           country: "ng",
@@ -125,23 +258,36 @@ exports.signup = async (req, res, next) => {
           label: "",
         },
       ],
-      password: hash,
-      roleId,
+      password,
       role: "user",
       status: "offline",
+      isVerified: true,
     });
+
     const userSaved = await newUser.save();
 
     const user = await getUserWithUnitsMembers(userSaved._id);
 
     const access_token = signToken(user._id);
 
-    return res.status(200).json({ access_token, user });
+    res.status(200).json({
+      access_token,
+      user,
+      message: "Email verified successfully. Account created.",
+    });
+
+    // Remove the temp user record
+    await TempUser.deleteOne({ _id: verifiedID });
+
   } catch (error) {
     console.error(error);
-    return res.status(500).json({ message: error.message });
+    res.status(500).json({ message: "Internal server error.", status: 500 });
   }
 };
+
+
+
+
 
 exports.addUser = async (req, res, next) => {
   try {
@@ -172,6 +318,7 @@ exports.addUser = async (req, res, next) => {
       birthday,
       password,
       isActive,
+      isVerified,
     } = data;
 
     const userNewData = await User.findOne({ email }).lean();
@@ -207,6 +354,8 @@ exports.addUser = async (req, res, next) => {
       birthday,
       password: hash,
       isActive,
+      isVerified,
+
     });
     const addedUser = await newUser.save();
 
@@ -227,20 +376,22 @@ exports.login = async (req, res, next) => {
     const userNewData = await User.findOne({ email }).lean();
 
     if (!userNewData) {
-      return res.status(400).json([
+      return res.status(404).json([
         {
           type: 'email',
-          message: 'User not Found !',
+          message: 'User not Found, Please sign-Up!',
+          status: 404,
         },
       ]);
     }
 
     const isMatch = await bcrypt.compare(password, userNewData.password);
     if (!isMatch) {
-      return res.status(400).json([
+      return res.status(401).json([
         {
-          type: 'email',
-          message: 'Incorrect Crendentials',
+          type: 'password',
+          message: 'Incorrect Password',
+          status: 401,
         },
       ]);
     }

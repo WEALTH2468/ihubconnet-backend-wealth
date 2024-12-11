@@ -6,41 +6,44 @@ const crypto = require('crypto');
 const { type } = require('os');
 
 const userSchema = mongoose.Schema(
-    {
-        lastLogin: {type: Date},
-        background: { type: String },
-        avatar: { type: String },
-        role: { type: String },
-        displayName: { type: String, required: true },
-        firstName: { type: String },
-        lastName: { type: String },
-        gender: { type: String },
-        customerId: { type: mongoose.Schema.Types.ObjectId, ref: 'Customer' },
-        departments: { type: Array, default: [] },
-        units: { type: Array, default: [] },
-        unitsMembers: { type: Array, default: [] },
-        jobPosition: { type: String },
-        email: { type: String, unique: true, required: true },
-        emails: { type: Array, default: [] },
-        phoneNumbers: { type: Array, default: [] },
-        address: { type: String },
-        city: { type: String },
-        birthday: { type: Date },
-        aboutMe: { type: String },
-        password: { type: String, required: true },
-        isActive: { type: Boolean, default: true },
-        roleId: { type: mongoose.Schema.Types.ObjectId, ref: 'Role' },
-        status: {
-            type: String,
-            enum: ['online', 'away', 'offline'],
-            default: 'offline',
-        },
-
-        passwordResetToken: { type: String },
-        passwordResetExpires: { type: Date },
-        passwordChangeAt: { type: Date },
+  {
+    lastLogin: { type: Date },
+    background: { type: String },
+    avatar: { type: String },
+    role: { type: String },
+    displayName: { type: String, required: true },
+    firstName: { type: String },
+    lastName: { type: String },
+    gender: { type: String },
+    customerId: { type: mongoose.Schema.Types.ObjectId, ref: "Customer" },
+    departments: { type: Array, default: [] },
+    units: { type: Array, default: [] },
+    unitsMembers: { type: Array, default: [] },
+    jobPosition: { type: String },
+    email: { type: String, unique: true, required: true },
+    emails: { type: Array, default: [] },
+    phoneNumbers: { type: Array, default: [] },
+    address: { type: String },
+    city: { type: String },
+    birthday: { type: Date },
+    aboutMe: { type: String },
+    password: { type: String, required: true },
+    isActive: { type: Boolean, default: true },
+    roleId: { type: mongoose.Schema.Types.ObjectId, ref: "Role" },
+    status: {
+      type: String,
+      enum: ["online", "away", "offline"],
+      default: "offline",
     },
-    { timestamps: true }
+
+    isVerified: { type: Boolean, default: false },
+
+
+    passwordResetToken: { type: String },
+    passwordResetExpires: { type: Date },
+    passwordChangeAt: { type: Date },
+  },
+  { timestamps: true }
 );
 
 userSchema.pre('findOneAndDelete', async function (next) {
@@ -82,6 +85,7 @@ userSchema.methods.generatePasswordResetToken = function () {
 
     return resetToken;
 };
+
 
 userSchema.plugin(uniqueValidator);
 
