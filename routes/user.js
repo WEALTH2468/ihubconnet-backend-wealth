@@ -9,6 +9,8 @@ router.get('/chatsidebarusers/:id', auth, userCtrl.getUsersForChatSideBar)
 router.get('/refresh', auth, userCtrl.refresh);
 router.post('/addUser', userCtrl.addUser);
 router.post('/signup', userCtrl.signup);
+router.post("/verify-email", auth, userCtrl.verifyEmail);
+router.post("/resendVerificationCode", auth, userCtrl.resendVerificationCode);
 router.post('/login', userCtrl.login);
 router.delete('/delete/:id', userCtrl.delete);
 router.patch('/update/:id', auth, multer, userCtrl.update);
